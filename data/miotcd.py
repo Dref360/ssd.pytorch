@@ -13,6 +13,7 @@ import warnings
 import cv2
 import h5py
 import numpy as np
+import scipy.ndimage
 import torch
 import torch.utils.data as data
 
@@ -113,6 +114,8 @@ class MIODetection(data.Dataset):
         self._annopath = osp.join(self.root, 'json{}.json'.format('train' if is_train else 'test'))
         self._imgpath = osp.join(self.root, 'images', '%s.jpg')
         self.get_h5pyfile = lambda: h5py.File(osp.join(self.root, 'apriori2.h5'), 'r')
+        with self.get_h5pyfile() as f:
+            self.odfs = {k:f[k].value for k in f.keys()}
         self.is_train = is_train
         self.ids = list()
         data = json.load(open(self._annopath))
@@ -137,15 +140,18 @@ class MIODetection(data.Dataset):
         img_id, [video_id, target] = self.ids[index]
         img = cv2.imread(self._imgpath % img_id)
         height, width, channels = img.shape
-        with self.get_h5pyfile() as f:
-            odf = f[video_id].value  # Remove the uniform dist
+        odf = self.odfs[video_id]  # Remove the uniform dist
+        if odf.shape[-1] != 10:
+            zoom = 10 / odf.shape[-1]
+            odf = scipy.ndimage.zoom(odf, (1,1,1,zoom))
+            assert odf.shape[-1] == 10
 
         p = [.5] + [.5 / odf.shape[0]] * odf.shape[0]
         to_take = np.random.choice(np.arange(0, odf.shape[0] + 1), p=p)
         to_take = to_take if self.is_train else odf.shape[0]
         if to_take == 0:
             # Initial uniform odf
-            odf = np.ones([19, 19, odf.shape[-1]]) / odf.shape[-1]
+            odf = np.zeros([19, 19, odf.shape[-1]])
         else:
             # Remove all but one uniform
             odf = odf[np.random.choice(np.arange(0, to_take), to_take, replace=False)].sum(0)
