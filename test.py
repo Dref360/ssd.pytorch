@@ -14,7 +14,7 @@ from data import BaseTransform, MIO_CLASSES
 from data import MIO_CLASSES as labelmap, MIOAnnotationTransform, MIODetection
 from ssd import build_ssd
 
-SHOW = True
+SHOW = False
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
 parser.add_argument('--trained_model', default='weights/ssd300_MIO_30000.pth',
@@ -44,14 +44,17 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
     for i in tqdm(range(num_images)):
         print('Testing image {:d}/{:d}....'.format(i + 1, num_images))
         img = testset.pull_image(i)
+        odf = testset.pull_odf(i)
+        odf = Variable(torch.from_numpy(np.copy(odf).astype(np.float32)).permute(2, 0, 1).unsqueeze(0))
         img_id = testset.ids[i][0]
         x = torch.from_numpy(transform(img)[0][..., (2, 1, 0)]).permute(2, 0, 1)
         x = Variable(x.unsqueeze(0))
 
         if cuda:
             x = x.cuda()
+            odf = odf.cuda()
 
-        y = net(x)  # forward pass
+        y = net(x, odf)  # forward pass
         detections = y.data
         # scale each detection back up to the image
         scale = torch.Tensor([img.shape[1], img.shape[0],

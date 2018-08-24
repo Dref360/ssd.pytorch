@@ -200,6 +200,16 @@ class MIODetection(data.Dataset):
         img_id = self.ids[index][0]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 
+    def pull_odf(self, index):
+        video_id = self.ids[index][1][0]
+        odf = self.odfs[video_id]  # Remove the uniform dist
+        if odf.shape[-1] != 10:
+            zoom = 10 / odf.shape[-1]
+            odf = scipy.ndimage.zoom(odf, (1, 1, 1, zoom))
+            assert odf.shape[-1] == 10
+        return self.normalize_odf(odf.sum(0))
+
+
     def pull_anno(self, index):
         '''Returns the original annotation of image at index
 
