@@ -42,7 +42,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
     num_images = len(testset)
     results = []
     for i in tqdm(range(num_images)):
-        print('Testing image {:d}/{:d}....'.format(i + 1, num_images))
+        # print('Testing image {:d}/{:d}....'.format(i + 1, num_images))
         img = testset.pull_image(i)
         odf = testset.pull_odf(i)
         odf = Variable(torch.from_numpy(np.copy(odf).astype(np.float32)).permute(2, 0, 1).unsqueeze(0))

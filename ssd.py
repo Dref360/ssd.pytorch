@@ -85,8 +85,6 @@ class SSD(nn.Module):
             x = self.vgg[k](x)
         sources.append(x)
 
-        x = torch.cat((x, odfs), 1)
-
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
@@ -94,9 +92,11 @@ class SSD(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
-        for (x, l, c, s) in zip(sources, self.loc, self.conf, self.status):
+        for idx, (x, l, c, s) in enumerate(zip(sources, self.loc, self.conf, self.status)):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+            if idx == 1:
+                x = torch.cat((x, odfs), 1)
             status.append(s(x).permute(0, 2, 3, 1).contiguous())
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
@@ -166,10 +166,10 @@ def add_extras(cfg, i, batch_norm=False):
     for k, v in enumerate(cfg):
         if in_channels != 'S':
             if v == 'S':
-                layers += [nn.Conv2d(in_channels + (10 if k == 0 else 0), cfg[k + 1],
+                layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
             else:
-                layers += [nn.Conv2d(in_channels + (10 if k == 0 else 0), v, kernel_size=(1, 3)[flag])]
+                layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
         in_channels = v
     return layers
@@ -185,12 +185,12 @@ def multibox(vgg, extra_layers, cfg, num_classes):
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(vgg[v].out_channels,
+        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k == 1 else 0),
                                   cfg[k] * 2, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
+        conf_layers += [nn.Conv2d(v.out_channels , cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
         status_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * 2, kernel_size=3, padding=1)]
