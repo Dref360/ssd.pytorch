@@ -43,6 +43,22 @@ mio = {
     'name': 'MIO',
 }
 
+mio_finetune = {
+    'num_classes': 12,
+    # Set lr to 1e-5
+    'lr_steps': (500000, 550000, 600000),
+    'max_iter': 600000,
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'min_dim': 300,
+    'steps': [8, 16, 32, 64, 100, 300],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'MIO',
+}
+
 coco = {
     'num_classes': 201,
     'lr_steps': (280000, 360000, 400000),

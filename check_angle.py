@@ -6,6 +6,7 @@ from collections import defaultdict
 import cv2
 import numpy as np
 from scipy import stats
+import sys
 import torch
 from tqdm import tqdm
 
@@ -20,9 +21,11 @@ args = parser.parse_args()
 pjoin = os.path.join
 
 gt_test = pjoin(args.root, 'gt_test.csv')
-print(subprocess.run(['python', 'localization_evaluation.py', gt_test, args.csv],
+out = subprocess.run([sys.executable, 'localization_evaluation.py', gt_test, args.csv],
                      stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE).stdout.decode('utf-8'))
+                     stderr=subprocess.PIPE)
+print(out.stdout.decode('utf-8'))
+print(out.stderr.decode('utf-8'))
 
 
 gt = json.load(open(pjoin(args.root, 'jsontest.json'), 'r'))
