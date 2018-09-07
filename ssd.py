@@ -44,6 +44,7 @@ class SSD(nn.Module):
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
         self.status = nn.ModuleList(head[2])
+        self.odfs = nn.ModuleList(list(get_odfs()))
 
         if phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
@@ -92,11 +93,12 @@ class SSD(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
-        for idx, (x, l, c, s) in enumerate(zip(sources, self.loc, self.conf, self.status)):
+        for idx, (x, l, c, s, o) in enumerate(zip(sources, self.loc, self.conf, self.status, [None] + list(self.odfs))):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
-            if idx == 1:
+            if o is not None:
                 x = torch.cat((x, odfs), 1)
+                odfs = o(odfs)
             status.append(s(x).permute(0, 2, 3, 1).contiguous())
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
@@ -175,6 +177,14 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
+def get_odfs():
+    for _ in range(3):
+        yield nn.Sequential(
+                nn.Conv2d(10, 64, 3, 1, 1),
+                nn.MaxPool2d(2, ceil_mode=True),
+                nn.Conv2d(64, 10, 3, 1, 1))
+
+
 def multibox(vgg, extra_layers, cfg, num_classes):
     loc_layers = []
     conf_layers = []
@@ -185,14 +195,14 @@ def multibox(vgg, extra_layers, cfg, num_classes):
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k == 1 else 0),
+        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k > 0 else 0),
                                   cfg[k] * 2, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels , cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(v.out_channels, cfg[k]
+        status_layers += [nn.Conv2d(v.out_channels + (10 if k > 0 else 0), cfg[k]
                                   * 2, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers, status_layers)
 
