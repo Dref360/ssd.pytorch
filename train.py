@@ -117,6 +117,7 @@ def train():
         if args.fresh:
             ssd_net.conf.apply(weights_init)
             ssd_net.status.apply(weights_init)
+            ssd_net.odfs.apply(weights_init)
     else:
         vgg_weights = torch.load(args.save_folder + args.basenet)
         print('Loading base network...')

@@ -128,7 +128,7 @@ class SSD(nn.Module):
             state_dict = torch.load(base_file,
                                  map_location=lambda storage, loc: storage)
             if cut:
-                state_dict = {k:v for k,v in state_dict.items() if all(layer not in k for layer in ['conf', 'status'])}
+                state_dict = {k:v for k,v in state_dict.items() if all(layer not in k for layer in ['conf', 'status', 'odfs'])}
             self.load_state_dict(state_dict, strict=False)
             print('Finished!')
         else:
