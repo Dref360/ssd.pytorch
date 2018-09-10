@@ -14,7 +14,7 @@ from data import BaseTransform, MIO_CLASSES
 from data import MIO_CLASSES as labelmap, MIOAnnotationTransform, MIODetection
 from ssd import build_ssd
 
-SHOW = False
+SHOW = True
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
 parser.add_argument('--trained_model', default='weights/ssd300_MIO_30000.pth',
@@ -23,6 +23,9 @@ parser.add_argument('--save_folder', default='.', type=str,
                     help='Dir to save results')
 parser.add_argument('--visual_threshold', default=0.0, type=float,
                     help='Final confidence threshold')
+parser.add_argument('--batch_size', default=16, type=int,
+                    help='Batch size')
+
 parser.add_argument('--cuda', action='store_true',
                     help='Use cuda to train model')
 parser.add_argument('--root', default='/data/mio_tcd_seg', help='Location of VOC root directory')
@@ -41,51 +44,56 @@ if not os.path.exists(args.save_folder):
 def test_net(save_folder, net, cuda, testset, transform, thresh):
     num_images = len(testset)
     results = []
-    for i in tqdm(range(num_images)):
-        # print('Testing image {:d}/{:d}....'.format(i + 1, num_images))
-        img = testset.pull_image(i)
-        odf = testset.pull_odf(i)
-        odf = Variable(torch.from_numpy(np.copy(odf).astype(np.float32)).permute(2, 0, 1).unsqueeze(0))
-        img_id = testset.ids[i][0]
-        x = torch.from_numpy(transform(img)[0][..., (2, 1, 0)]).permute(2, 0, 1)
-        x = Variable(x.unsqueeze(0))
+    n_batch = int(np.ceil(num_images / args.batch_size))
+    for b_idx in tqdm(range(n_batch)):
+        idx = range(b_idx*args.batch_size, (b_idx+1) * args.batch_size)
+        imgs = []
+        odfs = []
+        img_ids = []
+        for i in idx:
+            imgs.append(testset.pull_image(i))
+            odfs.append(testset.pull_odf(i))
+            img_ids.append(testset.ids[i][0])
 
+        x = torch.from_numpy(np.array([transform(img)[0][..., (2, 1, 0)] for img in imgs])).permute(0,3,1,2)
+        odfs = torch.from_numpy(np.array(odfs).astype(np.float32)).permute(0,3,1,2)
         if cuda:
             x = x.cuda()
-            odf = odf.cuda()
+            odfs = odfs.cuda()
 
-        y = net(x, odf)  # forward pass
-        detections = y.data
+        y = net(x, odfs)  # forward pass
+        detections_v = y.data
         # scale each detection back up to the image
-        scale = torch.Tensor([img.shape[1], img.shape[0],
-                              img.shape[1], img.shape[0]])
+        scales = [torch.Tensor([img.shape[1], img.shape[0],
+                              img.shape[1], img.shape[0]]) for img in imgs]
 
-        for i in range(detections.size(1)):
-            j = 0
-            while detections[0, i, j, 0] > thresh:
-                score = detections[0, i, j, 0].item()
-                label_name = labelmap[i - 1]
-                pt = (detections[0, i, j, 1:-2] * scale).cpu().numpy()
-                orientation = (detections[0, i, j, -2]).item() * (2 * np.pi)
-                parked = (detections[0, i, j, -1]).item()
-                coords = (pt[0], pt[1], pt[2], pt[3])
-                coords_int = tuple(map(int, coords))
-                cx, cy = int(np.mean(coords[::2])), int(np.mean(coords[1::2]))
-                results.append([img_id, label_name, score, *coords, orientation, parked])
-                if SHOW:
-                    clr = (0, 255, 0) if parked < 0.5 else (0, 0, 255)
-                    cv2.putText(img, label_name + '' + str(score)[:8],
-                                (coords_int[0], coords_int[1]),
-                                cv2.FONT_HERSHEY_COMPLEX,
-                                0.5, (0, 0, 255))
-                    cv2.arrowedLine(img, (cx, cy), (int(cx + 20 * np.cos(orientation)), int(cy + 20 * np.sin(orientation))),
-                                    clr, 1, tipLength=2.)
+        for detections, img, scale, img_id in zip(detections_v, imgs, scales, img_ids):
+            for i in range(detections.size(0)):
+                j = 0
+                while detections[i, j, 0] > thresh:
+                    score = detections[i, j, 0].item()
+                    label_name = labelmap[i - 1]
+                    pt = (detections[i, j, 1:-2] * scale).cpu().numpy()
+                    orientation = (detections[i, j, -2]).item() * (2 * np.pi)
+                    parked = (detections[i, j, -1]).item()
+                    coords = (pt[0], pt[1], pt[2], pt[3])
+                    coords_int = tuple(map(int, coords))
+                    cx, cy = int(np.mean(coords[::2])), int(np.mean(coords[1::2]))
+                    results.append([img_id, label_name, score, *coords, orientation, parked])
+                    if SHOW:
+                        clr = (0, 255, 0) if parked < 0.5 else (0, 0, 255)
+                        cv2.putText(img, label_name + '' + str(score)[:8],
+                                    (coords_int[0], coords_int[1]),
+                                    cv2.FONT_HERSHEY_COMPLEX,
+                                    0.5, (0, 0, 255))
+                        cv2.arrowedLine(img, (cx, cy), (int(cx + 20 * np.cos(orientation)), int(cy + 20 * np.sin(orientation))),
+                                        clr, 1, tipLength=2.)
 
-                    cv2.rectangle(img, (coords_int[0], coords_int[1]), (coords_int[2], coords_int[3]), (255, 0, 0))
-                j += 1
-        if SHOW:
-            cv2.imshow('lol', img)
-            cv2.waitKey(500)
+                        cv2.rectangle(img, (coords_int[0], coords_int[1]), (coords_int[2], coords_int[3]), (255, 0, 0))
+                    j += 1
+            if SHOW:
+                cv2.imshow('lol', img)
+                cv2.waitKey(500)
 
     with open('machin.csv', 'w') as f:
         f.writelines([','.join(map(str, k)) + '\n' for k in results])
