@@ -113,7 +113,7 @@ class MIODetection(data.Dataset):
         self.name = dataset_name
         self._annopath = osp.join(self.root, 'json{}.json'.format('train' if is_train else 'test'))
         self._imgpath = osp.join(self.root, 'images', '%s.jpg')
-        self.get_h5pyfile = lambda: h5py.File(osp.join(self.root, 'apriori2.h5'), 'r')
+        self.get_h5pyfile = lambda: h5py.File(osp.join(self.root, 'apriori_ssd.h5'), 'r')
         with self.get_h5pyfile() as f:
             self.odfs = {k:f[k].value for k in f.keys()}
         self.is_train = is_train
@@ -155,12 +155,10 @@ class MIODetection(data.Dataset):
         else:
             # Remove all but one uniform
             odf = odf[np.random.choice(np.arange(0, to_take), to_take, replace=False)].sum(0)
-            odf = self.normalize_odf(odf)
         # Add noise
         if self.is_train:
             # 10% noise
             odf += np.random.normal(0, 0.05, size=[19, 19, odf.shape[-1]])
-            odf = self.normalize_odf(odf)
 
         if self.target_transform is not None:
             target = self.target_transform(target, width, height)
@@ -172,7 +170,8 @@ class MIODetection(data.Dataset):
             img = img[:, :, (2, 1, 0)]
             # img = img.transpose(2, 0, 1)
             target = np.hstack((boxes, labels))
-            odf = self.normalize_odf(odf)
+
+        odf = self.softmax(np.minimum(odf, 0.1), axis=-1)
         return (torch.from_numpy(img).permute(2, 0, 1),
                 target,
                 torch.from_numpy(np.copy(odf).astype(np.float32)).permute(2, 0, 1),
@@ -185,6 +184,11 @@ class MIODetection(data.Dataset):
             odf = odf / odf.sum(-1, keepdims=True)
             odf[np.isnan(odf)] = 0
         return odf
+
+    def softmax(self, x, axis=-1):
+        """Compute softmax values for each sets of scores in x."""
+        e_x = np.exp(x - np.max(x, axis=axis)[..., np.newaxis])
+        return e_x / e_x.sum(axis=axis)[..., np.newaxis]
 
     def pull_image(self, index):
         '''Returns the original image object at index in PIL form
