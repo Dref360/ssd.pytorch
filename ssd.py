@@ -93,6 +93,7 @@ class SSD(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
+        # Skip the first layer of ODF
         for idx, (x, l, c, s, o) in enumerate(zip(sources, self.loc, self.conf, self.status, [None] + list(self.odfs))):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())

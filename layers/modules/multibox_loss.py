@@ -135,7 +135,7 @@ class MultiBoxLoss(nn.Module):
         targets_weighted = parked_t[(pos + neg).gt(0)]
         loss_p = F.binary_cross_entropy(
             F.sigmoid(parked_p), targets_weighted, size_average=False)
-        loss_o = torch.sum((0.5 * targets_weighted) * loss_o + (2 * (1 - targets_weighted)) * loss_o)
+        loss_o = torch.sum((0.5 * targets_weighted) * loss_o + (5 * (1 - targets_weighted)) * loss_o)
 
         # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
 
