@@ -146,7 +146,7 @@ class MIODetection(data.Dataset):
             odf = scipy.ndimage.zoom(odf, (1,1,1,zoom))
             assert odf.shape[-1] == 10
 
-        p = [.5] + [.5 / odf.shape[0]] * odf.shape[0]
+        p = [.1] + [.9 / odf.shape[0]] * odf.shape[0]
         to_take = np.random.choice(np.arange(0, odf.shape[0] + 1), p=p)
         to_take = to_take if self.is_train else odf.shape[0]
         if to_take == 0:

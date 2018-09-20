@@ -94,7 +94,7 @@ class SSD(nn.Module):
 
         # apply multibox head to source layers
         # Skip the first layer of ODF
-        for idx, (x, l, c, s, o) in enumerate(zip(sources, self.loc, self.conf, self.status, [None] + list(self.odfs))):
+        for idx, (x, l, c, s, o) in enumerate(zip(sources, self.loc, self.conf, self.status, [None] + list(self.odfs) + [None])):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
             if o is not None:
@@ -179,7 +179,7 @@ def add_extras(cfg, i, batch_norm=False):
 
 
 def get_odfs():
-    for _ in range(3):
+    for _ in range(4):
         yield nn.Sequential(
                 nn.Conv2d(10, 64, 3, 1, 1),
                 nn.MaxPool2d(2, ceil_mode=True),
@@ -196,14 +196,14 @@ def multibox(vgg, extra_layers, cfg, num_classes):
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k > 0 else 0),
+        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k not in (0,) else 0),
                                   cfg[k] * 2, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels , cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(v.out_channels + (10 if k > 0 else 0), cfg[k]
+        status_layers += [nn.Conv2d(v.out_channels + (10 if k not in (5, ) else 0), cfg[k]
                                   * 2, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers, status_layers)
 
