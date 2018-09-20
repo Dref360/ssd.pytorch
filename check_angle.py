@@ -91,10 +91,6 @@ def cosine_distance(b1, b2):
     return 1. - dot_metric(b1, b2)
 
 
-def abs_dot_metric(b1, b2):
-    return np.abs(dot_metric(b1, b2))
-
-
 def dot_metric(b1, b2):
     a, b = map(float, (b1['angle'], b2['angle']))
     av = np.array([np.cos(a), np.sin(a)])
@@ -120,7 +116,6 @@ def generic_test(distance, filters, name, min_iou, min_mag):
 
 ALL_METRICS = {"Cosine distance": cosine_distance,
                "ArcCosine distance": arccosine_distance,
-               "Abs Dot": abs_dot_metric,
                "Dot": dot_metric}
 
 
@@ -134,8 +129,10 @@ def test_with_filters(min_conf, min_iou, min_mag):
     return base_record
 
 
-CONFS = [0.5, 0.7, 0.9]
+CONFS = [0.1, 0.3, 0.5, 0.7, 0.9]
 IOUS = [0.5, 0.7, 0.9]
-MAGS = [1, 2]
-print(pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
+MAGS = [2]
+dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
                                                    tqdm(list(product(CONFS, IOUS, MAGS)), desc="Computing..."))))
+print(dt)
+dt.to_clipboard(sep='\t')
