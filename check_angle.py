@@ -1,18 +1,23 @@
+import argparse
 import csv
 import json
 import os
+import subprocess
 from collections import defaultdict
+from itertools import product
 
 import cv2
 import numpy as np
-from scipy import stats
-import sys
+import pandas as pd
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
+
 import torch
 from tqdm import tqdm
+from joblib import Parallel, delayed
 
 from layers.box_utils import jaccard
-import subprocess
-import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('root', help='Dataset root')
@@ -21,12 +26,9 @@ args = parser.parse_args()
 pjoin = os.path.join
 
 gt_test = pjoin(args.root, 'gt_test.csv')
-out = subprocess.run([sys.executable, 'localization_evaluation.py', gt_test, args.csv],
+print(subprocess.run(['python', 'localization_evaluation.py', gt_test, args.csv],
                      stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE)
-print(out.stdout.decode('utf-8'))
-print(out.stderr.decode('utf-8'))
-
+                     stderr=subprocess.PIPE).stdout.decode('utf-8'))
 
 gt = json.load(open(pjoin(args.root, 'jsontest.json'), 'r'))
 pred = defaultdict(list)
@@ -60,9 +62,9 @@ def iou(b1, b2):
     return jaccard(torch.from_numpy(b1_arr), torch.from_numpy(b2_arr)).numpy()[0].item()
 
 
-def find_best_iou(b1, vals, keep_parked=False):
+def find_best_iou(b1, vals, keep_parked=False, min_iou=0.75, min_mag=2.):
     best = max([(b2, iou(b1, b2)) for b2 in vals], key=lambda k: k[1])
-    if (not keep_parked and float(best[0]['mag']) < 2.) or best[1] < 0.75:
+    if (not keep_parked and float(best[0]['mag']) < min_mag) or best[1] < min_iou:
         return None
     else:
         return best[0]
@@ -81,27 +83,56 @@ def draw_rect(img, b, clr):
                     prk_clr, 1, tipLength=1)
 
 
+def arccosine_distance(b1, b2):
+    return np.arccos(dot_metric(b1, b2))
+
+
 def cosine_distance(b1, b2):
-    a, b = map(float,(b1['angle'], b2['angle']))
+    return 1. - dot_metric(b1, b2)
+
+
+def dot_metric(b1, b2):
+    a, b = map(float, (b1['angle'], b2['angle']))
     av = np.array([np.cos(a), np.sin(a)])
     bv = np.array([np.cos(b), np.sin(b)])
     dot = np.dot(av, bv)
-    return np.arccos(np.clip(dot, -1, 1))
+    return np.clip(dot, -1, 1)
 
 
-
-def score():
+def generic_test(distance, filters, name, min_iou, min_mag):
     score = []
-    for k, boxes in tqdm(pred.items()):
+    for k, boxes in pred.items():
         [_, vals] = gt[k]
         for b in boxes:
-            if float(b['conf']) < 0.5:
+            if all([f(b) for f in filters]):
                 continue
-            bbox = find_best_iou(b, vals, keep_parked=False)
+            bbox = find_best_iou(b, vals, keep_parked=False, min_iou=min_iou, min_mag=min_mag)
             if bbox is None:
                 continue
-            cos_dist = cosine_distance(b, bbox)
-            score.append(cos_dist)
-    return score
-#show()
-print(stats.describe(score()))
+            dist = distance(b, bbox)
+            score.append(dist)
+    return np.mean(score), np.std(score)
+
+
+ALL_METRICS = {"Cosine distance": cosine_distance,
+               "ArcCosine distance": arccosine_distance,
+               "Dot": dot_metric}
+
+
+def test_with_filters(min_conf, min_iou, min_mag):
+    conf_filter = lambda b: float(b['conf']) < min_conf
+    filters = [conf_filter]
+    base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag}
+    for name, distance in ALL_METRICS.items():
+        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=min_mag)
+        base_record[name] = mean
+    return base_record
+
+
+CONFS = [0.1, 0.3, 0.5, 0.7, 0.9]
+IOUS = [0.5, 0.7, 0.9]
+MAGS = [2]
+dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
+                                                   tqdm(list(product(CONFS, IOUS, MAGS)), desc="Computing..."))))
+print(dt)
+dt.to_clipboard(sep='\t')

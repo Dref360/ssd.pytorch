@@ -156,7 +156,9 @@ def train():
     print('Using the specified args:')
     print(args)
 
-    step_index = 0
+    step_index = (np.array(cfg['lr_steps']) < args.start_iter).sum()
+    if step_index > 0:
+        adjust_learning_rate(optimizer, args.gamma, step_index)
 
     if args.visdom:
         vis_title = 'SSD.PyTorch on ' + dataset.name

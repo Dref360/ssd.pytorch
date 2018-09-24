@@ -211,7 +211,7 @@ class MIODetection(data.Dataset):
             zoom = 10 / odf.shape[-1]
             odf = scipy.ndimage.zoom(odf, (1, 1, 1, zoom))
             assert odf.shape[-1] == 10
-        return self.normalize_odf(odf.sum(0))
+        return self.softmax(np.minimum(self.normalize_odf(odf.sum(0)), 0.1), axis=-1)
 
 
     def pull_anno(self, index):

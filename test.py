@@ -14,7 +14,7 @@ from data import BaseTransform, MIO_CLASSES
 from data import MIO_CLASSES as labelmap, MIOAnnotationTransform, MIODetection
 from ssd import build_ssd
 
-SHOW = True
+SHOW = False
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detection')
 parser.add_argument('--trained_model', default='weights/ssd300_MIO_30000.pth',
@@ -46,7 +46,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
     results = []
     n_batch = int(np.ceil(num_images / args.batch_size))
     for b_idx in tqdm(range(n_batch)):
-        idx = range(b_idx*args.batch_size, (b_idx+1) * args.batch_size)
+        idx = range(b_idx*args.batch_size, min(len(testset.ids), (b_idx+1) * args.batch_size))
         imgs = []
         odfs = []
         img_ids = []
