@@ -23,7 +23,7 @@ parser.add_argument('--save_folder', default='.', type=str,
                     help='Dir to save results')
 parser.add_argument('--visual_threshold', default=0.0, type=float,
                     help='Final confidence threshold')
-parser.add_argument('--batch_size', default=16, type=int,
+parser.add_argument('--batch_size', default=8, type=int,
                     help='Batch size')
 
 parser.add_argument('--cuda', action='store_true',
