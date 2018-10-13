@@ -7,6 +7,8 @@ from data import voc, coco, mio
 import os
 
 
+ADDED = 20
+
 class SSD(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
@@ -181,9 +183,9 @@ def add_extras(cfg, i, batch_norm=False):
 def get_odfs():
     for _ in range(4):
         yield nn.Sequential(
-                nn.Conv2d(10, 64, 3, 1, 1),
-                nn.MaxPool2d(2, ceil_mode=True),
-                nn.Conv2d(64, 10, 3, 1, 1))
+                nn.Conv2d(ADDED, 64, 3, 1, 1),
+                nn.AvgPool2d(2, ceil_mode=True),
+                nn.Conv2d(64, ADDED, 1, 1, 0))
 
 
 def multibox(vgg, extra_layers, cfg, num_classes):
@@ -196,14 +198,14 @@ def multibox(vgg, extra_layers, cfg, num_classes):
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(vgg[v].out_channels + (10 if k not in (0,) else 0),
+        status_layers += [nn.Conv2d(vgg[v].out_channels + (ADDED if k not in (0,) else 0),
                                   cfg[k] * 2, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels , cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
-        status_layers += [nn.Conv2d(v.out_channels + (10 if k not in (5, ) else 0), cfg[k]
+        status_layers += [nn.Conv2d(v.out_channels + (ADDED if k not in (5, ) else 0), cfg[k]
                                   * 2, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers, status_layers)
 

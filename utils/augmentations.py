@@ -340,7 +340,7 @@ class Expand(object):
         image = expand_image
 
         expand_odf = np.zeros(
-            (int(height * ratio), int(width * ratio), 10),
+            (int(height * ratio), int(width * ratio), odf.shape[-1]),
             dtype=odf.dtype)
         expand_odf[:, :, :] = 0
         expand_odf[int(top):int(top + height),
