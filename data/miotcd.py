@@ -34,6 +34,8 @@ MIO_CLASSES = [
     "work_van"
 ]
 
+ODF_DIM = 20
+
 # note: if you used our download scripts, this should be right
 MIO_ROOT = osp.join(HOME, "data/MIO/")
 
@@ -124,7 +126,7 @@ class MIODetection(data.Dataset):
         shuffle(items)
         with self.get_h5pyfile() as f:
             for k, [[_, video_id], vals] in items:
-                if video_id in f:
+                if video_id in f or not is_train:
                     # 2-3 per file
                     self.ids.append((k, (video_id, vals)))
 
@@ -176,10 +178,10 @@ class MIODetection(data.Dataset):
                 width)
 
     def resize_odf(self, odf):
-        if odf.shape[-1] != 20:
-            zoom = 20 / odf.shape[-1]
+        if odf.shape[-1] != ODF_DIM:
+            zoom = ODF_DIM / odf.shape[-1]
             odf = scipy.ndimage.zoom(odf, (1, 1, 1, zoom))
-            assert odf.shape[-1] == 20
+            assert odf.shape[-1] == ODF_DIM
         return odf
 
     def normalize_odf(self, odf):
@@ -210,7 +212,10 @@ class MIODetection(data.Dataset):
 
     def pull_odf(self, index):
         video_id = self.ids[index][1][0]
-        odf = self.odfs[video_id]  # Remove the uniform dist
+        if video_id in self.odfs:
+            odf = self.odfs[video_id]  # Remove the uniform dist
+        else:
+            odf = np.zeros([1, 19, 19, ODF_DIM])
         odf = self.resize_odf(odf)
         return self.softmax(np.minimum((odf.sum(0)), 0.1), axis=-1)
 
