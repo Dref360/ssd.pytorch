@@ -9,6 +9,7 @@ from itertools import product
 import cv2
 import numpy as np
 import pandas as pd
+
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
@@ -23,6 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('root', help='Dataset root')
 parser.add_argument('csv', help='CSV path')
 args = parser.parse_args()
+print(args.csv)
 pjoin = os.path.join
 
 gt_test = pjoin(args.root, 'gt_test.csv')
@@ -114,9 +116,27 @@ def generic_test(distance, filters, name, min_iou, min_mag):
     return np.mean(score), np.std(score)
 
 
+def count_over(threshold):
+    def f(b1, b2):
+        return int(np.arccos(dot_metric(b1, b2)) > threshold)
+
+    return f
+
+
+def idle_accuracy(thresh, mag_idle):
+    def f(b1, b2):
+        gt_idle = float(b2['mag']) < mag_idle
+        pred_idle = b1['parked'] > thresh
+        return 1 if gt_idle == pred_idle else 0
+
+    return f
+
+
 ALL_METRICS = {"Cosine distance": cosine_distance,
                "ArcCosine distance": arccosine_distance,
-               "Dot": dot_metric}
+               "Dot": dot_metric,
+               "More than .3 arccos": count_over(0.3),
+               "Parked Acc. at 0.5-2": (False, idle_accuracy(0.5, 2))}
 
 
 def test_with_filters(min_conf, min_iou, min_mag):
@@ -124,7 +144,11 @@ def test_with_filters(min_conf, min_iou, min_mag):
     filters = [conf_filter]
     base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag}
     for name, distance in ALL_METRICS.items():
-        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=min_mag)
+        use_mag = True
+        if isinstance(distance, tuple):
+            use_mag, distance = distance
+        mag_to_use = -1 if not use_mag else min_mag
+        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=mag_to_use)
         base_record[name] = mean
     return base_record
 
@@ -135,4 +159,4 @@ MAGS = [2]
 dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
                                                    tqdm(list(product(CONFS, IOUS, MAGS)), desc="Computing..."))))
 print(dt)
-dt.to_clipboard(sep='\t')
+dt.to_clipboard(sep='\t', index=False)

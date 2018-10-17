@@ -7,6 +7,7 @@ Updated by: Ellis Brown, Max deGroot
 """
 import json
 import os.path as osp
+from collections import defaultdict
 from random import shuffle, seed
 import warnings
 
@@ -124,9 +125,11 @@ class MIODetection(data.Dataset):
         items = list(data.items())
         seed(1337)
         shuffle(items)
+        print("Count", np.unique([v.shape[0] for v in self.odfs.values()],return_counts=True))
         with self.get_h5pyfile() as f:
             for k, [[_, video_id], vals] in items:
                 if video_id in f or not is_train:
+
                     # 2-3 per file
                     self.ids.append((k, (video_id, vals)))
 
@@ -145,7 +148,7 @@ class MIODetection(data.Dataset):
         odf = self.odfs[video_id]  # Remove the uniform dist
         odf = self.resize_odf(odf)
 
-        p = [.1] + [.9 / odf.shape[0]] * odf.shape[0]
+        p = [.01] + [.99 / odf.shape[0]] * odf.shape[0]
         to_take = np.random.choice(np.arange(0, odf.shape[0] + 1), p=p)
         to_take = to_take if self.is_train else odf.shape[0]
         if to_take == 0:
@@ -170,7 +173,7 @@ class MIODetection(data.Dataset):
             # img = img.transpose(2, 0, 1)
             target = np.hstack((boxes, labels))
 
-        odf = self.softmax(np.minimum(odf, 0.1), axis=-1)
+        odf = self.softmax(np.maximum(odf, 0.1), axis=-1)
         return (torch.from_numpy(img).permute(2, 0, 1),
                 target,
                 torch.from_numpy(np.copy(odf).astype(np.float32)).permute(2, 0, 1),
@@ -210,14 +213,20 @@ class MIODetection(data.Dataset):
         img_id = self.ids[index][0]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 
-    def pull_odf(self, index):
+    def pull_odf(self, index, odf_size=None):
+        assert odf_size is None or odf_size >= 0
         video_id = self.ids[index][1][0]
         if video_id in self.odfs:
             odf = self.odfs[video_id]  # Remove the uniform dist
         else:
             odf = np.zeros([1, 19, 19, ODF_DIM])
+        if odf_size is not None and odf_size > 0:
+            odf_size = min(odf_size, odf.shape[0])
+            odf = odf[np.random.choice(np.arange(0, odf_size), odf_size, replace=False)]
+        elif odf_size is not None and odf_size == 0:
+            odf = np.zeros([1, 19, 19, ODF_DIM])
         odf = self.resize_odf(odf)
-        return self.softmax(np.minimum((odf.sum(0)), 0.1), axis=-1)
+        return self.softmax(np.maximum(odf.sum(0), 0.01), axis=-1)
 
 
     def pull_anno(self, index):
@@ -255,12 +264,12 @@ def draw_odf(odf, img):
     fx = width / 19
     fy = height / 19
     box = list(range(19))
-    angles = np.linspace(0, 1.,11)
-    cst = 50
+    angles = np.linspace(0, 1.,ODF_DIM + 1)
+    cst = 100
     for i,j in product(box,box):
         cx = int((i + 0.5) * fx)
         cy = int((j + 0.5) * fy)
-        o = odf[:,j, i]
+        o = odf[:,i, j]
         i1 = np.argmax(o)
         cx2 = cx + np.cos(angles[i1] * 2 * np.pi) * cst * o[i1]
         cy2 = cy + np.sin(angles[i1] * 2 * np.pi) * cst * o[i1]
@@ -275,15 +284,17 @@ if __name__ == '__main__':
     MEANS = (104, 117, 123)
     d = MIODetection('/data/mio_tcd_seg', transform=SSDAugmentation(300,
                                                                     MEANS), is_train=False)
-    d1 = MIODetection('/data/mio_tcd_seg', transform=None, is_train=False)
+    d1 = MIODetection('/data/mio_tcd_seg', transform=None, is_train=True)
     for idx in range(100):
         # img = d.pull_image(idx)
         img, _, odf, height, width = d.pull_item(idx)
         img = img.permute(1, 2, 0).numpy()
         img = cv2.resize(img, (608,608))
 
-        draw_odf(odf, img.copy())
+        # draw_odf(odf, img.copy())
         img, _, odf, height, width = d1.pull_item(idx)
+        odf = d1.pull_odf(idx)
+        odf = torch.from_numpy(np.array(odf).astype(np.float32)).permute(2, 0, 1)
         img = img.permute(1, 2, 0).numpy()
         img = cv2.resize(img, (608, 608))
         draw_odf(odf, img.copy())

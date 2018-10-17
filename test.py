@@ -23,7 +23,8 @@ parser.add_argument('--save_folder', default='.', type=str,
                     help='Dir to save results')
 parser.add_argument('--visual_threshold', default=0.0, type=float,
                     help='Final confidence threshold')
-parser.add_argument('--batch_size', default=8, type=int,
+parser.add_argument('--odf_size', default=None, type=int)
+parser.add_argument('--batch_size', default=4, type=int,
                     help='Batch size')
 
 parser.add_argument('--cuda', action='store_true',
@@ -52,7 +53,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
         img_ids = []
         for i in idx:
             imgs.append(testset.pull_image(i))
-            odfs.append(testset.pull_odf(i))
+            odfs.append(testset.pull_odf(i, args.odf_size))
             img_ids.append(testset.ids[i][0])
 
         x = torch.from_numpy(np.array([transform(img)[0][..., (2, 1, 0)] for img in imgs])).permute(0,3,1,2)
@@ -95,7 +96,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
                 cv2.imshow('lol', img)
                 cv2.waitKey(500)
 
-    with open('machin.csv', 'w') as f:
+    with open('test_{}_ODF={}.csv'.format(args.trained_model.split('/')[-1], '' if args.odf_size is None else args.odf_size), 'w') as f:
         f.writelines([','.join(map(str, k)) + '\n' for k in results])
 
 
