@@ -324,7 +324,7 @@ class Expand(object):
             return image, boxes, labels, odf
 
         height, width, depth = image.shape
-        odf = cv2.resize(odf, (width, height))
+        odf = cv2.resize(odf, (width, height),interpolation=cv2.INTER_NEAREST)
         ratio = random.uniform(1, 4)
         left_param = random.uniform(0,1)
         left = left_param * (width*ratio - width)
@@ -346,7 +346,7 @@ class Expand(object):
         expand_odf[int(top):int(top + height),
         int(left):int(left + width)] = odf
         odf = expand_odf
-        odf = cv2.resize(odf, (19, 19))
+        odf = cv2.resize(odf, (19, 19),interpolation=cv2.INTER_NEAREST)
 
         boxes = boxes.copy()
         boxes[:, :2] += (int(left), int(top))
@@ -358,13 +358,12 @@ class Expand(object):
 class RandomMirror(object):
     def __call__(self, image, boxes, classes, odf=None):
         _, width, _ = image.shape
+        half_win = odf.shape[-1]//2
         if random.randint(2):
             image = image[:, ::-1]
             odf = odf[:, ::-1]
-            top = odf[..., :5]
-            bot = odf[..., 5:]
-            odf[..., :5] = top[..., ::-1]
-            odf[..., 5:] = bot[..., ::-1]
+            odf[..., :half_win] = odf[..., :half_win][..., ::-1]
+            odf[..., half_win:] = odf[..., half_win:][..., ::-1]
             boxes = boxes.copy()
             boxes[:, 0::2] = width - boxes[:, 2::-2]
             classes[:, -2] = 0.5 - classes[:, -2]

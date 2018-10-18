@@ -226,7 +226,7 @@ class MIODetection(data.Dataset):
         elif odf_size is not None and odf_size == 0:
             odf = np.zeros([1, 19, 19, ODF_DIM])
         odf = self.resize_odf(odf)
-        return self.softmax(np.maximum(odf.sum(0), 0.01), axis=-1)
+        return self.softmax(np.maximum(odf.sum(0), 0.1), axis=-1)
 
 
     def pull_anno(self, index):
@@ -269,7 +269,7 @@ def draw_odf(odf, img):
     for i,j in product(box,box):
         cx = int((i + 0.5) * fx)
         cy = int((j + 0.5) * fy)
-        o = odf[:,i, j]
+        o = odf[:,j, i]
         i1 = np.argmax(o)
         cx2 = cx + np.cos(angles[i1] * 2 * np.pi) * cst * o[i1]
         cy2 = cy + np.sin(angles[i1] * 2 * np.pi) * cst * o[i1]
@@ -278,27 +278,35 @@ def draw_odf(odf, img):
     cv2.imshow('lol', img)
     cv2.waitKey(10000)
 
+def draw_odf2(odf, img):
+    width, height = 608, 608
+    odf = odf.permute(1, 2, 0).numpy()
+    odf = cv2.resize(np.clip(odf.max(-1)[..., np.newaxis],0,255).astype(np.uint8),(width,height))
+    img = np.clip(img + cv2.cvtColor(odf[..., np.newaxis],cv2.COLOR_GRAY2BGR), 0, 255)
+    cv2.imshow('lol', img)
+    cv2.waitKey(10000)
+
 
 if __name__ == '__main__':
     from itertools import product
     MEANS = (104, 117, 123)
     d = MIODetection('/data/mio_tcd_seg', transform=SSDAugmentation(300,
-                                                                    MEANS), is_train=False)
-    d1 = MIODetection('/data/mio_tcd_seg', transform=None, is_train=True)
-    for idx in range(100):
+                                                                    MEANS), is_train=True)
+    #d1 = MIODetection('/data/mio_tcd_seg', transform=None, is_train=True)
+    for idx in range(1000):
         # img = d.pull_image(idx)
-        img, _, odf, height, width = d.pull_item(idx)
-        img = img.permute(1, 2, 0).numpy()
-        img = cv2.resize(img, (608,608))
+        #img, _, odf, height, width = d.pull_item(idx)
+        #img = img.permute(1, 2, 0).numpy()
+        #img = cv2.resize(img, (608,608))
 
-        # draw_odf(odf, img.copy())
-        img, _, odf, height, width = d1.pull_item(idx)
-        odf = d1.pull_odf(idx)
-        odf = torch.from_numpy(np.array(odf).astype(np.float32)).permute(2, 0, 1)
+        #draw_odf2(odf, img.copy())
+        img, _, odf, height, width = d.pull_item(idx)
+"""        #odf = d1.pull_odf(idx)
+        #odf = torch.from_numpy(np.array(odf).astype(np.float32)).permute(2, 0, 1)
         img = img.permute(1, 2, 0).numpy()
         img = cv2.resize(img, (608, 608))
-        draw_odf(odf, img.copy())
-
+        draw_odf2(odf, img.copy())
+"""
 
 
 
