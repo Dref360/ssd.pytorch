@@ -29,6 +29,7 @@ parser.add_argument('--batch_size', default=4, type=int,
 
 parser.add_argument('--cuda', action='store_true',
                     help='Use cuda to train model')
+parser.add_argument('--keep_valid', action='store_true')
 parser.add_argument('--root', default='/data/mio_tcd_seg', help='Location of VOC root directory')
 parser.add_argument('-f', default=None, type=str, help="Dummy arg so we can load in Jupyter Notebooks")
 args = parser.parse_args()
@@ -52,9 +53,14 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
         odfs = []
         img_ids = []
         for i in idx:
+            odf = testset.pull_odf(i, args.odf_size, args.keep_valid)
+            if odf is None:
+                continue
             imgs.append(testset.pull_image(i))
-            odfs.append(testset.pull_odf(i, args.odf_size))
+            odfs.append(odf)
             img_ids.append(testset.ids[i][0])
+        if len(imgs) == 0:
+            continue
 
         x = torch.from_numpy(np.array([transform(img)[0][..., (2, 1, 0)] for img in imgs])).permute(0,3,1,2)
         odfs = torch.from_numpy(np.array(odfs).astype(np.float32)).permute(0,3,1,2)

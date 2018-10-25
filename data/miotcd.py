@@ -213,13 +213,15 @@ class MIODetection(data.Dataset):
         img_id = self.ids[index][0]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 
-    def pull_odf(self, index, odf_size=None):
+    def pull_odf(self, index, odf_size=None, keep_valid=False):
         assert odf_size is None or odf_size >= 0
         video_id = self.ids[index][1][0]
         if video_id in self.odfs:
             odf = self.odfs[video_id]  # Remove the uniform dist
         else:
             odf = np.zeros([1, 19, 19, ODF_DIM])
+        if odf.shape[0] < odf_size and keep_valid:
+            return None
         if odf_size is not None and odf_size > 0:
             odf_size = min(odf_size, odf.shape[0])
             odf = odf[np.random.choice(np.arange(0, odf_size), odf_size, replace=False)]
