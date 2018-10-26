@@ -102,7 +102,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
                 cv2.imshow('lol', img)
                 cv2.waitKey(500)
 
-    with open('test_{}_ODF={}.csv'.format(args.trained_model.split('/')[-1], '' if args.odf_size is None else args.odf_size), 'w') as f:
+    with open('csvs/test_{}_ODF={}.csv'.format(args.trained_model.split('/')[-1], '' if args.odf_size is None else args.odf_size), 'w') as f:
         f.writelines([','.join(map(str, k)) + '\n' for k in results])
 
 
