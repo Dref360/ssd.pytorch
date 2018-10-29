@@ -12,7 +12,7 @@ class Detect(Function):
     confidence score and locations.
     """
 
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh, variance = None):
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -21,7 +21,7 @@ class Detect(Function):
         if nms_thresh <= 0:
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
-        self.variance = {201: coco, 21: voc, 12: mio}[num_classes]['variance']
+        self.variance = variance or {201: coco, 21: voc, 12: mio}[num_classes]['variance']
 
     def __reduce__(self):
         return (Detect, (self.num_classes, self.background_label, self.top_k, self.conf_thresh, self.nms_thresh))
