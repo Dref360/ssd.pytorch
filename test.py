@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 from data import BaseTransform, MIO_CLASSES
@@ -24,7 +24,7 @@ parser.add_argument('--save_folder', default='.', type=str,
 parser.add_argument('--visual_threshold', default=0.0, type=float,
                     help='Final confidence threshold')
 parser.add_argument('--odf_size', default=None, type=int)
-parser.add_argument('--batch_size', default=4, type=int,
+parser.add_argument('--batch_size', default=1, type=int,
                     help='Batch size')
 
 parser.add_argument('--cuda', action='store_true',
@@ -43,27 +43,53 @@ if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
 
-def test_net(save_folder, net, cuda, testset, transform, thresh):
-    num_images = len(testset)
-    results = []
-    n_batch = int(np.ceil(num_images / args.batch_size))
-    for b_idx in tqdm(range(n_batch)):
-        idx = range(b_idx*args.batch_size, min(len(testset.ids), (b_idx+1) * args.batch_size))
+class TestDataset(Dataset):
+    def __init__(self, testset, odf_size, keep_valid, transform):
+        self.testset = testset
+        self.odf_size = odf_size
+        self.keep_valid = keep_valid
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.testset)
+
+    def __getitem__(self, i):
+        odf = self.testset.pull_odf(i, args.odf_size, args.keep_valid)
+        if odf is None:
+            return None, None, None
+        img = self.testset.pull_image(i)
+        img_id = self.testset.ids[i][0]
+        return img, odf, img_id
+
+    def collate_fn(self, data):
         imgs = []
         odfs = []
         img_ids = []
-        for i in idx:
-            odf = testset.pull_odf(i, args.odf_size, args.keep_valid)
+        shapes = []
+        for img, odf, img_id in data:
             if odf is None:
                 continue
-            imgs.append(testset.pull_image(i))
-            odfs.append(odf)
-            img_ids.append(testset.ids[i][0])
+            shapes.append(img.shape)
+            imgs.append(np.array(self.transform(img)[0][..., (2, 1, 0)]))
+            odfs.append(np.array(odf).astype(np.float32))
+            img_ids.append(img_id)
+
+        return map(np.array,[imgs, odfs, img_ids, shapes])
+
+
+def test_net(save_folder, net, cuda, testset, transform, thresh):
+    testset = TestDataset(testset, args.odf_size, args.keep_valid, transform)
+    dataloader = DataLoader(dataset=testset, batch_size=args.batch_size, num_workers=1, collate_fn=testset.collate_fn)
+
+    num_images = len(testset)
+    results = []
+    n_batch = int(np.ceil(num_images / args.batch_size))
+    for imgs, odfs, img_ids, shapes in tqdm(dataloader):
         if len(imgs) == 0:
             continue
 
-        x = torch.from_numpy(np.array([transform(img)[0][..., (2, 1, 0)] for img in imgs])).permute(0,3,1,2)
-        odfs = torch.from_numpy(np.array(odfs).astype(np.float32)).permute(0,3,1,2)
+        x = torch.from_numpy(imgs).permute(0, 3, 1, 2)
+        odfs = torch.from_numpy(odfs).permute(0, 3, 1, 2)
         if cuda:
             x = x.cuda()
             odfs = odfs.cuda()
@@ -71,8 +97,8 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
         y = net(x, odfs)  # forward pass
         detections_v = y.data
         # scale each detection back up to the image
-        scales = [torch.Tensor([img.shape[1], img.shape[0],
-                              img.shape[1], img.shape[0]]) for img in imgs]
+        scales = [torch.Tensor([shape[1], shape[0],
+                                shape[1], shape[0]]) for shape in shapes]
 
         for detections, img, scale, img_id in zip(detections_v, imgs, scales, img_ids):
             for i in range(detections.size(0)):
@@ -93,7 +119,8 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
                                     (coords_int[0], coords_int[1]),
                                     cv2.FONT_HERSHEY_COMPLEX,
                                     0.5, (0, 0, 255))
-                        cv2.arrowedLine(img, (cx, cy), (int(cx + 20 * np.cos(orientation)), int(cy + 20 * np.sin(orientation))),
+                        cv2.arrowedLine(img, (cx, cy),
+                                        (int(cx + 20 * np.cos(orientation)), int(cy + 20 * np.sin(orientation))),
                                         clr, 1, tipLength=2.)
 
                         cv2.rectangle(img, (coords_int[0], coords_int[1]), (coords_int[2], coords_int[3]), (255, 0, 0))
@@ -102,7 +129,8 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
                 cv2.imshow('lol', img)
                 cv2.waitKey(500)
 
-    with open('csvs/test_{}_ODF={}.csv'.format(args.trained_model.split('/')[-1], '' if args.odf_size is None else args.odf_size), 'w') as f:
+    with open('csvs/test_{}_ODF={}.csv'.format(args.trained_model.split('/')[-1],
+                                               '' if args.odf_size is None else args.odf_size), 'w') as f:
         f.writelines([','.join(map(str, k)) + '\n' for k in results])
 
 

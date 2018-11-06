@@ -116,7 +116,7 @@ class MIODetection(data.Dataset):
         self.name = dataset_name
         self._annopath = osp.join(self.root, 'json{}.json'.format('train' if is_train else 'test'))
         self._imgpath = osp.join(self.root, 'images', '%s.jpg')
-        self.get_h5pyfile = lambda: h5py.File(osp.join(self.root, 'apriori_ssd.h5'), 'r')
+        self.get_h5pyfile = lambda: h5py.File(osp.join(self.root, 'apriori_of.h5'), 'r')
         with self.get_h5pyfile() as f:
             self.odfs = {k:self.resize_odf(f[k].value) for k in f.keys()}
         self.is_train = is_train
@@ -125,7 +125,9 @@ class MIODetection(data.Dataset):
         items = list(data.items())
         seed(1337)
         shuffle(items)
-        print("Count", np.unique([v.shape[0] for v in self.odfs.values()],return_counts=True))
+        counts = np.unique([v.shape[0] for v in self.odfs.values()],return_counts=True)
+        self.max_odf = counts[0][-1]
+        print("Count", counts)
         with self.get_h5pyfile() as f:
             for k, [[_, video_id], vals] in items:
                 if video_id in f or not is_train:
@@ -220,7 +222,7 @@ class MIODetection(data.Dataset):
             odf = self.odfs[video_id]  # Remove the uniform dist
         else:
             odf = np.zeros([1, 19, 19, ODF_DIM])
-        if odf.shape[0] < odf_size and keep_valid:
+        if odf.shape[0] < self.max_odf and keep_valid:
             return None
         if odf_size is not None and odf_size > 0:
             odf_size = min(odf_size, odf.shape[0])

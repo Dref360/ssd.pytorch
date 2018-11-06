@@ -159,4 +159,5 @@ MAGS = [2]
 dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
                                                    tqdm(list(product(CONFS, IOUS, MAGS)), desc="Computing..."))))
 print(dt)
-dt.to_clipboard(sep='\t', index=False)
+dt.to_csv('pds/{}'.format(args.csv.split('/')[-1]))
+exit(0)
