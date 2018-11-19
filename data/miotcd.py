@@ -222,7 +222,7 @@ class MIODetection(data.Dataset):
             odf = self.odfs[video_id]  # Remove the uniform dist
         else:
             odf = np.zeros([1, 19, 19, ODF_DIM])
-        if odf.shape[0] < self.max_odf and keep_valid:
+        if odf.shape[0] < odf_size and keep_valid:
             return None
         if odf_size is not None and odf_size > 0:
             odf_size = min(odf_size, odf.shape[0])

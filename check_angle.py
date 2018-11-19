@@ -2,13 +2,14 @@ import argparse
 import csv
 import json
 import os
-import subprocess
 from collections import defaultdict
 from itertools import product
 
 import cv2
 import numpy as np
 import pandas as pd
+
+from data import MIO_CLASSES
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
@@ -28,9 +29,11 @@ print(args.csv)
 pjoin = os.path.join
 
 gt_test = pjoin(args.root, 'gt_test.csv')
-print(subprocess.run(['python', 'localization_evaluation.py', gt_test, args.csv],
-                     stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE).stdout.decode('utf-8'))
+
+if False:
+    print(subprocess.run(['python', 'localization_evaluation.py', gt_test, args.csv],
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE).stdout.decode('utf-8'))
 
 gt = json.load(open(pjoin(args.root, 'jsontest.json'), 'r'))
 pred = defaultdict(list)
@@ -65,7 +68,10 @@ def iou(b1, b2):
 
 
 def find_best_iou(b1, vals, keep_parked=False, min_iou=0.75, min_mag=2.):
-    best = max([(b2, iou(b1, b2)) for b2 in vals], key=lambda k: k[1])
+    ious = [(b2, iou(b1, b2)) for b2 in vals]
+    if not ious:
+        return None
+    best = max(ious, key=lambda k: k[1])
     if (not keep_parked and float(best[0]['mag']) < min_mag) or best[1] < min_iou:
         return None
     else:
@@ -101,10 +107,11 @@ def dot_metric(b1, b2):
     return np.clip(dot, -1, 1)
 
 
-def generic_test(distance, filters, name, min_iou, min_mag):
+def generic_test(distance, filters, name, min_iou, min_mag, vhcl_class):
     score = []
     for k, boxes in pred.items():
         [_, vals] = gt[k]
+        vals = list(filter(lambda b_gt: (b_gt['class'] == vhcl_class) if vhcl_class is not None else True, vals))
         for b in boxes:
             if all([f(b) for f in filters]):
                 continue
@@ -113,6 +120,8 @@ def generic_test(distance, filters, name, min_iou, min_mag):
                 continue
             dist = distance(b, bbox)
             score.append(dist)
+    if not score:
+        return 0, 0
     return np.mean(score), np.std(score)
 
 
@@ -132,6 +141,11 @@ def idle_accuracy(thresh, mag_idle):
     return f
 
 
+def area(b1):
+    xmin, ymin, xmax, ymax = map(float, [b1['xmin'], b1['ymin'], b1['xmax'], b1['ymax']])
+    return max(1, (xmax - xmin) * (ymax - ymin))
+
+
 ALL_METRICS = {"Cosine distance": cosine_distance,
                "ArcCosine distance": arccosine_distance,
                "Dot": dot_metric,
@@ -139,25 +153,36 @@ ALL_METRICS = {"Cosine distance": cosine_distance,
                "Parked Acc. at 0.5-2": (False, idle_accuracy(0.5, 2))}
 
 
-def test_with_filters(min_conf, min_iou, min_mag):
+def test_with_filters(min_conf, min_iou, min_mag, size, vhcl_class):
     conf_filter = lambda b: float(b['conf']) < min_conf
-    filters = [conf_filter]
-    base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag}
+    area_filter = lambda b: ALL_SIZES[size][0] < area(b) < ALL_SIZES[size][1]
+    filters = [conf_filter, area_filter]
+    base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag, 'vhcl_class': vhcl_class}
     for name, distance in ALL_METRICS.items():
         use_mag = True
         if isinstance(distance, tuple):
             use_mag, distance = distance
         mag_to_use = -1 if not use_mag else min_mag
-        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=mag_to_use)
+        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=mag_to_use,
+                                 vhcl_class=vhcl_class)
         base_record[name] = mean
     return base_record
 
 
+ALL_SIZES = {'All': [0 ** 2, 1e5 ** 2],
+             'small': [0 ** 2, 32 ** 2],
+             'medium': [32 ** 2, 96 ** 2],
+             'large': [96 ** 2, 1e5 ** 2]}
+
 CONFS = [0.1, 0.3, 0.5, 0.7, 0.9]
 IOUS = [0.5, 0.7, 0.9]
 MAGS = [2]
+SIZES = ['All', 'small', 'medium', 'large']
+CLASSES = MIO_CLASSES + [None]
+# CLASSES = [None]
 dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
-                                                   tqdm(list(product(CONFS, IOUS, MAGS)), desc="Computing..."))))
+                                                   tqdm(list(product(CONFS, IOUS, MAGS, SIZES, CLASSES)),
+                                                        desc="Computing..."))))
 print(dt)
-dt.to_csv('pds/{}'.format(args.csv.split('/')[-1]))
+dt.to_csv('pds/{}'.format(args.csv.split('/')[-1]), sep='\t', na_rep='All', index=False)
 exit(0)
