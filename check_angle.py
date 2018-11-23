@@ -67,12 +67,12 @@ def iou(b1, b2):
     return jaccard(torch.from_numpy(b1_arr), torch.from_numpy(b2_arr)).numpy()[0].item()
 
 
-def find_best_iou(b1, vals, keep_parked=False, min_iou=0.75, min_mag=2.):
+def find_best_iou(b1, vals, min_iou=0.75):
     ious = [(b2, iou(b1, b2)) for b2 in vals]
     if not ious:
         return None
     best = max(ious, key=lambda k: k[1])
-    if (not keep_parked and float(best[0]['mag']) < min_mag) or best[1] < min_iou:
+    if best[1] < min_iou:
         return None
     else:
         return best[0]
@@ -107,24 +107,6 @@ def dot_metric(b1, b2):
     return np.clip(dot, -1, 1)
 
 
-def generic_test(distance, filters, name, min_iou, min_mag, vhcl_class):
-    score = []
-    for k, boxes in pred.items():
-        [_, vals] = gt[k]
-        vals = list(filter(lambda b_gt: (b_gt['class'] == vhcl_class) if vhcl_class is not None else True, vals))
-        for b in boxes:
-            if all([f(b) for f in filters]):
-                continue
-            bbox = find_best_iou(b, vals, keep_parked=False, min_iou=min_iou, min_mag=min_mag)
-            if bbox is None:
-                continue
-            dist = distance(b, bbox)
-            score.append(dist)
-    if not score:
-        return 0, 0
-    return np.mean(score), np.std(score)
-
-
 def count_over(threshold):
     def f(b1, b2):
         return int(np.arccos(dot_metric(b1, b2)) > threshold)
@@ -146,6 +128,30 @@ def area(b1):
     return max(1, (xmax - xmin) * (ymax - ymin))
 
 
+def chain_filter(fs, vals):
+    for f in fs:
+        vals = filter(f, vals)
+    return list(vals)
+
+
+def generic_test(distance, filters, min_iou, gt_filters):
+    score = []
+    for k, boxes in pred.items():
+        [_, vals] = gt[k]
+        vals = chain_filter(gt_filters, vals)
+        for b in boxes:
+            if any([f(b) for f in filters]):
+                continue
+            bbox = find_best_iou(b, vals, min_iou=min_iou)
+            if bbox is None:
+                continue
+            dist = distance(b, bbox)
+            score.append(dist)
+    if not score:
+        return None, None
+    return np.mean(score), np.std(score)
+
+
 ALL_METRICS = {"Cosine distance": cosine_distance,
                "ArcCosine distance": arccosine_distance,
                "Dot": dot_metric,
@@ -155,34 +161,39 @@ ALL_METRICS = {"Cosine distance": cosine_distance,
 
 def test_with_filters(min_conf, min_iou, min_mag, size, vhcl_class):
     conf_filter = lambda b: float(b['conf']) < min_conf
-    area_filter = lambda b: ALL_SIZES[size][0] < area(b) < ALL_SIZES[size][1]
+    area_filter = lambda b: not (ALL_SIZES[size][0] <= area(b) < ALL_SIZES[size][1])
     filters = [conf_filter, area_filter]
-    base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag, 'vhcl_class': vhcl_class}
+
+    vhcl_filter = lambda b_gt: (b_gt['class'] == vhcl_class) if vhcl_class is not None else True
+
+    base_record = {'min_conf': min_conf, 'min_iou': min_iou, 'min_mag': min_mag, 'vhcl_class': vhcl_class, 'size': size}
     for name, distance in ALL_METRICS.items():
         use_mag = True
         if isinstance(distance, tuple):
             use_mag, distance = distance
         mag_to_use = -1 if not use_mag else min_mag
-        mean, std = generic_test(distance=distance, filters=filters, name=name, min_iou=min_iou, min_mag=mag_to_use,
-                                 vhcl_class=vhcl_class)
+        mag_filter = lambda b_gt: (float(b_gt['mag']) > mag_to_use)
+        gt_filters = [vhcl_filter, mag_filter]
+        mean, std = generic_test(distance=distance, filters=filters, min_iou=min_iou, gt_filters=gt_filters)
         base_record[name] = mean
     return base_record
 
 
-ALL_SIZES = {'All': [0 ** 2, 1e5 ** 2],
+ALL_SIZES = {'All': [0 ** 2, 1e10 ** 2],
              'small': [0 ** 2, 32 ** 2],
              'medium': [32 ** 2, 96 ** 2],
-             'large': [96 ** 2, 1e5 ** 2]}
+             'large': [96 ** 2, 1e10 ** 2]}
 
 CONFS = [0.1, 0.3, 0.5, 0.7, 0.9]
 IOUS = [0.5, 0.7, 0.9]
 MAGS = [2]
 SIZES = ['All', 'small', 'medium', 'large']
 CLASSES = MIO_CLASSES + [None]
-# CLASSES = [None]
-dt = (pd.DataFrame.from_records(Parallel(n_jobs=4)(delayed(test_with_filters)(*args) for args in
-                                                   tqdm(list(product(CONFS, IOUS, MAGS, SIZES, CLASSES)),
-                                                        desc="Computing..."))))
+#CLASSES = [None]
+dt = (pd.DataFrame.from_records(
+    Parallel(n_jobs=4, backend='multiprocessing')(delayed(test_with_filters)(*args) for args in
+                                                  tqdm(list(product(CONFS, IOUS, MAGS, SIZES, CLASSES)),
+                                                       desc="Computing..."))))
 print(dt)
 dt.to_csv('pds/{}'.format(args.csv.split('/')[-1]), sep='\t', na_rep='All', index=False)
 exit(0)
