@@ -8,6 +8,12 @@ from torch.autograd import Variable
 
 from app.transform import BaseTransform, Detect
 
+parser = argparse.ArgumentParser()
+parser.add_argument('model', help='Pytorch >= 1.0 Model')
+parser.add_argument('video', help='Video file')
+parser.add_argument('--priors', default='priors.pkl')
+args = parser.parse_args()
+
 MIO_CLASSES = [
     "articulated_truck",
     "bicycle",
@@ -23,11 +29,6 @@ MIO_CLASSES = [
 ]
 thresh = 0.4
 transform = BaseTransform(300, (104, 117, 123))
-parser = argparse.ArgumentParser()
-parser.add_argument('model')
-parser.add_argument('video')
-parser.add_argument('--priors', default='priors.pkl')
-args = parser.parse_args()
 
 
 def process_img(net, priors, detect, img):
