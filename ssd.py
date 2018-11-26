@@ -48,9 +48,10 @@ class SSD(nn.Module):
         self.status = nn.ModuleList(head[2])
         self.odfs = nn.ModuleList(list(get_odfs()))
 
-        if phase == 'test':
+        if phase in ['test', 'onnx']:
             self.softmax = nn.Softmax(dim=-1)
-            self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
+            if phase == 'test':
+                self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, x, odfs):
         """Applies network layers and ops on input image(s) x.
@@ -114,6 +115,12 @@ class SSD(nn.Module):
                              self.num_classes)),                # conf preds
                 torch.sigmoid(status.view(status.size(0), -1, 2)),
                 self.priors.type(type(x.data))                  # default boxes
+            )
+        elif self.phase == 'onnx':
+            output = (
+                loc.view(loc.size(0), -1, 4),
+                self.softmax(conf.view(conf.size(0), -1, self.num_classes)),
+                torch.sigmoid(status.view(status.size(0), -1, 2))
             )
         else:
             output = (
@@ -226,7 +233,7 @@ mbox = {
 
 
 def build_ssd(phase, size=300, num_classes=21):
-    if phase != "test" and phase != "train":
+    if phase not in ['test', 'train', 'onnx']:
         print("ERROR: Phase: " + phase + " not recognized")
         return
     if size != 300:
