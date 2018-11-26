@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import torch
 from torch.autograd import Variable
+from tqdm import tqdm
 
 from app.transform import BaseTransform, Detect
 
@@ -87,7 +88,7 @@ def process_img(net, priors, detect, img, odf):
 def process_video(video_path, net, priors, detect, odf):
     cap = cv2.VideoCapture(video_path)
     writer = cv2.VideoWriter('test_odf.avi', cv2.VideoWriter_fourcc(*'XVID'), 20, (640, 480))
-    while cap.isOpened():
+    for _ in tqdm(range(20 * 60)):
         ret, frame = cap.read()
         img = list(process_img(net, priors, detect, frame, odf))[0]
         writer.write(cv2.resize(img, (640, 480)))
