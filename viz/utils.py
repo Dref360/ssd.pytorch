@@ -1,17 +1,16 @@
 import os
-from glob import glob
 from itertools import product
 from random import shuffle, sample
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 colors = ['g', 'b', 'm', 'c']
 styles = ['-', '--', ':', '-.']
 fmts = product(colors, styles)
 
-odf_style = list(product(['y',  'r'],['-', ':', '-.', '--']))
+odf_style = list(product(['y', 'r'], ['-', ':', '-.', '--']))
 
 pjoin = os.path.join
 # ArcCosine distance,Cosine distance,Dot,More than .3 arccos,Parked Acc. at 0.5-2
@@ -22,15 +21,23 @@ labels = {'arccos_distance': 'ArcCosine distance',
           'dot': 'Dot'}
 
 
-
 class PandasHandler():
-    def __init__(self, pickle_file):
+    def __init__(self, pickle_file, keep_xception=False):
         self.data = pd.read_pickle(pickle_file)
         self.data = self.data.fillna('All')
         for v in labels.values():
             self.data[self.data[v] == 'All'] = 0.
             self.data[v] = pd.to_numeric(self.data[v])
-        self.data = self.data[~self.data['filepath'].isin(['pds/XceptionMeanShiftOut.csv', 'pds/XceptionOut.csv'])]
+        self.data = self.data[~self.data['filepath'].isin([0.])]
+
+        if not keep_xception:
+            self.data = self.data[~self.data['filepath'].isin(['pds/XceptionMeanShiftOut.csv', 'pds/XceptionOut.csv'])]
+
+        self.ious = np.unique(self.data['min_iou'].values)
+        self.confs = np.unique(self.data['min_conf'].values)
+        self.sizes = np.unique(self.data['size'].values)
+        self.vhcl_classes = np.unique(self.data['vhcl_class'].values)
+        self.filepaths = np.unique(self.data['filepath'].values)
 
     def get_with(self, min_conf=None, min_iou=None, vhcl_cls='All', size='All'):
         df = self.data
@@ -56,13 +63,19 @@ class PandasHandler():
 
         return with_odf, no_odf
 
+def get_label(lbl):
+    lbl = lbl.split('/')[-1].split('.')[0]
+    if 'MIOODFOF' in lbl:
+        lbl = 'SSD with ODF'
+    return lbl
+
 
 def draw_constant(h, **kwargs):
     plt.axhline(y=h, **kwargs)
 
 
 def draw_line_from_pds_and_vhcl(label, pds, min_conf, vhcl_cls, size):
-    global  colors, styles
+    global colors, styles
     shuffle(colors)
     shuffle(styles)
     assert label in labels
@@ -70,8 +83,8 @@ def draw_line_from_pds_and_vhcl(label, pds, min_conf, vhcl_cls, size):
     legend = 'conf={}, vhcl={}, size={}'.format(min_conf, vhcl_cls, size)
     df = pds.get_with(min_conf, min_iou=0.5, vhcl_cls=vhcl_cls, size=size)
     with_odf, no_odf = pds.get_metric(df, label)
-    x,y = zip(*sorted(with_odf, key=lambda k: k[0]))
-    plt.plot(x,y, ''.join(sample(odf_style, 1)[0]), label='With ODF '+ legend)
+    x, y = zip(*sorted(with_odf, key=lambda k: k[0]))
+    plt.plot(x, y, ''.join(sample(odf_style, 1)[0]), label='With ODF ' + legend)
     for (fp, val), c, s in zip(no_odf, colors, styles):
         draw_constant(val, label=fp.split('/')[-1][:-4] + legend, color=c, linestyle=s)
 

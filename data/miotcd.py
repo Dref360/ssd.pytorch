@@ -293,24 +293,14 @@ def draw_odf2(odf, img):
 
 if __name__ == '__main__':
     from itertools import product
+    from data import BaseTransform
     MEANS = (104, 117, 123)
-    d = MIODetection('/data/mio_tcd_seg', transform=SSDAugmentation(300,
-                                                                    MEANS), is_train=True)
-    #d1 = MIODetection('/data/mio_tcd_seg', transform=None, is_train=True)
+    d = MIODetection('/data/mio_tcd_seg', transform=None, is_train=False)
     for idx in range(1000):
-        # img = d.pull_image(idx)
-        #img, _, odf, height, width = d.pull_item(idx)
-        #img = img.permute(1, 2, 0).numpy()
-        #img = cv2.resize(img, (608,608))
-
-        #draw_odf2(odf, img.copy())
         img, _, odf, height, width = d.pull_item(idx)
-"""        #odf = d1.pull_odf(idx)
-        #odf = torch.from_numpy(np.array(odf).astype(np.float32)).permute(2, 0, 1)
         img = img.permute(1, 2, 0).numpy()
         img = cv2.resize(img, (608, 608))
-        draw_odf2(odf, img.copy())
-"""
+        draw_odf(odf, img.copy())
 
 
 

@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import os
+import subprocess
 from collections import defaultdict
 from itertools import product
 
@@ -30,7 +31,7 @@ pjoin = os.path.join
 
 gt_test = pjoin(args.root, 'gt_test.csv')
 
-if False:
+if True:
     print(subprocess.run(['python', 'localization_evaluation.py', gt_test, args.csv],
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE).stdout.decode('utf-8'))
