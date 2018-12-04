@@ -31,7 +31,7 @@ for idx, (fp, serie) in enumerate(plots.items()):
 
 # create plot
 plt.xlabel('Vehicle classes')
-plt.ylabel('Scores')
+plt.ylabel('Error rate')
 plt.title('Effect of class')
 plt.xticks(index + bar_width, pds.vhcl_classes, rotation=90)
 plt.legend()

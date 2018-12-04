@@ -31,7 +31,7 @@ for idx, (fp, serie) in enumerate(plots.items()):
 
 # create plot
 plt.xlabel('Sizes')
-plt.ylabel('Scores')
+plt.ylabel('Error rate')
 plt.title('Effect of size')
 plt.xticks(index + bar_width, pds.sizes)
 plt.legend()
