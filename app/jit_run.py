@@ -1,13 +1,13 @@
 import argparse
 import pickle
 import scipy.ndimage
-
+import os
 import cv2
 import numpy as np
 import torch
 from torch.autograd import Variable
 from tqdm import tqdm
-
+import random
 from app.transform import BaseTransform, Detect
 
 parser = argparse.ArgumentParser()
@@ -33,6 +33,9 @@ MIO_CLASSES = [
 ]
 thresh = 0.4
 transform = BaseTransform(300, (104, 117, 123))
+
+if not os.path.exists('out'):
+    os.mkdir('out')
 
 
 def process_img(net, priors, detect, img, odf):
@@ -70,24 +73,28 @@ def process_img(net, priors, detect, img, odf):
                 cx, cy = int(np.mean(coords[::2])), int(np.mean(coords[1::2]))
                 if True:
                     clr = (0, 255, 0) if parked < 0.5 else (0, 0, 255)
-                    cv2.putText(img, label_name + '' + str(score)[:8],
+                    cv2.putText(img, label_name + ' ' + str(score)[:8],
                                 (coords_int[0], coords_int[1]),
                                 cv2.FONT_HERSHEY_COMPLEX,
                                 0.5, (0, 0, 255))
                     cv2.arrowedLine(img, (cx, cy),
                                     (int(cx + 20 * np.cos(orientation)), int(cy + 20 * np.sin(orientation))),
-                                    clr, 1, tipLength=2.)
+                                    clr, 2, tipLength=2.5)
 
                     cv2.rectangle(img, (coords_int[0], coords_int[1]), (coords_int[2], coords_int[3]), (255, 0, 0))
                 j += 1
         cv2.imshow('lol', img)
-        cv2.waitKey(1)
+        key = cv2.waitKey(1)
+        if ord('s') == key:
+            print("SAVED!")
+            cv2.imwrite('out/{}.png'.format(random.randint(0,200)),img)
         yield img
 
 
 def process_video(video_path, net, priors, detect, odf):
     cap = cv2.VideoCapture(video_path)
     writer = cv2.VideoWriter('test_odf.avi', cv2.VideoWriter_fourcc(*'XVID'), 20, (640, 480))
+    cap.set(cv2.CAP_PROP_POS_MSEC, 16 * 60 * cap.get(cv2.CAP_PROP_FPS) * 10)
     for _ in tqdm(range(20 * 60)):
         ret, frame = cap.read()
         img = list(process_img(net, priors, detect, frame, odf))[0]
